@@ -1,0 +1,121 @@
+_format_version: "3.0"
+
+services:
+  - name: user-service
+    url: http://user-service:8000
+    routes:
+      # Public routes (no authentication required)
+      - name: login-route
+        paths:
+          - /login
+        strip_path: false
+      - name: health-route
+        paths:
+          - /health
+        strip_path: false
+      - name: verify-route
+        paths:
+          - /verify
+        strip_path: false
+      # Protected routes (require JWT authentication)
+      - name: users-route
+        paths:
+          - /users
+        strip_path: false
+
+plugins:
+  # Rate limiting for all routes (IP-based)
+  - name: rate-limiting
+    config:
+      minute: 10
+      hour: 100
+      policy: local
+      limit_by: ip
+    route: login-route
+  - name: rate-limiting
+    config:
+      minute: 10
+      hour: 100
+      policy: local
+      limit_by: ip
+    route: health-route
+  - name: rate-limiting
+    config:
+      minute: 10
+      hour: 100
+      policy: local
+      limit_by: ip
+    route: verify-route
+  - name: rate-limiting
+    config:
+      minute: 10
+      hour: 100
+      policy: local
+      limit_by: ip
+    route: users-route
+
+  # IP whitelisting for all routes
+  - name: ip-restriction
+    config:
+      allow:
+        - "0.0.0.0/0"  # Allow all IPs by default, can be restricted via values.yaml
+    route: login-route
+  - name: ip-restriction
+    config:
+      allow:
+        - "0.0.0.0/0"
+    route: health-route
+  - name: ip-restriction
+    config:
+      allow:
+        - "0.0.0.0/0"
+    route: verify-route
+  - name: ip-restriction
+    config:
+      allow:
+        - "0.0.0.0/0"
+    route: users-route
+
+  # JWT authentication ONLY for protected routes
+  - name: jwt
+    config:
+      secret_is_base64: false
+      uri_param_names:
+        - token
+      claims_to_verify:
+        - exp
+    route: users-route
+
+  # Custom Lua plugin for all routes
+  - name: custom-lua-plugin
+    config:
+      inject_header: true
+      header_name: "X-Request-ID"
+      log_requests: true
+    route: login-route
+  - name: custom-lua-plugin
+    config:
+      inject_header: true
+      header_name: "X-Request-ID"
+      log_requests: true
+    route: health-route
+  - name: custom-lua-plugin
+    config:
+      inject_header: true
+      header_name: "X-Request-ID"
+      log_requests: true
+    route: verify-route
+  - name: custom-lua-plugin
+    config:
+      inject_header: true
+      header_name: "X-Request-ID"
+      log_requests: true
+    route: users-route
+
+consumers:
+  - username: api-consumer
+    custom_id: api-consumer-001
+    jwt_secrets:
+      - key: "user-service-issuer"
+        algorithm: "HS256"
+        secret: "your-secret-key-change-in-production"

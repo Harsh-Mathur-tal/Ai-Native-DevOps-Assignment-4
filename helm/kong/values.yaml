@@ -1,0 +1,94 @@
+replicaCount: 2
+
+image:
+  repository: kong-custom
+  pullPolicy: IfNotPresent
+  tag: "latest"
+
+imagePullSecrets: []
+nameOverride: ""
+fullnameOverride: ""
+
+serviceAccount:
+  create: true
+  annotations: {}
+  name: ""
+
+podAnnotations: {}
+
+podSecurityContext: {}
+
+securityContext: {}
+
+service:
+  type: LoadBalancer
+  port: 8000
+  adminPort: 8001
+
+ingress:
+  enabled: false
+  className: ""
+  annotations: {}
+  hosts:
+    - host: kong.local
+      paths:
+        - path: /
+          pathType: Prefix
+  tls: []
+
+resources:
+  limits:
+    cpu: 1000m
+    memory: 1Gi
+  requests:
+    cpu: 500m
+    memory: 512Mi
+
+autoscaling:
+  enabled: false
+  minReplicas: 1
+  maxReplicas: 10
+  targetCPUUtilizationPercentage: 80
+
+nodeSelector: {}
+
+tolerations: []
+
+affinity: {}
+
+env:
+  KONG_DATABASE: "off"
+  KONG_DECLARATIVE_CONFIG: "/kong/kong.yaml"
+  KONG_PROXY_ACCESS_LOG: "/dev/stdout"
+  KONG_ADMIN_ACCESS_LOG: "/dev/stdout"
+  KONG_PROXY_ERROR_LOG: "/dev/stderr"
+  KONG_ADMIN_ERROR_LOG: "/dev/stderr"
+  KONG_ADMIN_LISTEN: "0.0.0.0:8001"
+  KONG_PROXY_LISTEN: "0.0.0.0:8000"
+  KONG_PLUGINS: "bundled,custom-lua-plugin"
+
+# Kong configuration
+kongConfig:
+  # Rate limiting configuration
+  rateLimiting:
+    minute: 10
+    hour: 100
+    policy: local
+    limit_by: ip
+
+  # IP whitelisting
+  ipWhitelist:
+    allow:
+      - "0.0.0.0/0"  # Configure via values.yaml for production
+
+  # JWT configuration
+  jwt:
+    secret_is_base64: false
+    uri_param_names:
+      - token
+    claims_to_verify:
+      - exp
+    consumerSecret: "your-secret-key-change-in-production"
+
+# Custom plugins are baked into the kong-custom Docker image
+# See kong/Dockerfile for details

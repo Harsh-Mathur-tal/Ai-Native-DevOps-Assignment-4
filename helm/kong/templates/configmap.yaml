@@ -1,0 +1,141 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "kong.fullname" . }}-config
+  labels:
+    {{- include "kong.labels" . | nindent 4 }}
+data:
+  kong.yaml: |
+    _format_version: "3.0"
+
+    services:
+      - name: user-service
+        url: http://user-service:8000
+        routes:
+          # Public routes (no authentication required)
+          - name: login-route
+            paths:
+              - /login
+            strip_path: false
+          - name: health-route
+            paths:
+              - /health
+            strip_path: false
+          - name: verify-route
+            paths:
+              - /verify
+            strip_path: false
+          # Protected routes (require JWT authentication)
+          - name: users-route
+            paths:
+              - /users
+            strip_path: false
+
+    plugins:
+      # Rate limiting for all routes (IP-based)
+      - name: rate-limiting
+        config:
+          minute: {{ .Values.kongConfig.rateLimiting.minute }}
+          hour: {{ .Values.kongConfig.rateLimiting.hour }}
+          policy: {{ .Values.kongConfig.rateLimiting.policy }}
+          limit_by: {{ .Values.kongConfig.rateLimiting.limit_by }}
+        route: login-route
+      - name: rate-limiting
+        config:
+          minute: {{ .Values.kongConfig.rateLimiting.minute }}
+          hour: {{ .Values.kongConfig.rateLimiting.hour }}
+          policy: {{ .Values.kongConfig.rateLimiting.policy }}
+          limit_by: {{ .Values.kongConfig.rateLimiting.limit_by }}
+        route: health-route
+      - name: rate-limiting
+        config:
+          minute: {{ .Values.kongConfig.rateLimiting.minute }}
+          hour: {{ .Values.kongConfig.rateLimiting.hour }}
+          policy: {{ .Values.kongConfig.rateLimiting.policy }}
+          limit_by: {{ .Values.kongConfig.rateLimiting.limit_by }}
+        route: verify-route
+      - name: rate-limiting
+        config:
+          minute: {{ .Values.kongConfig.rateLimiting.minute }}
+          hour: {{ .Values.kongConfig.rateLimiting.hour }}
+          policy: {{ .Values.kongConfig.rateLimiting.policy }}
+          limit_by: {{ .Values.kongConfig.rateLimiting.limit_by }}
+        route: users-route
+
+      # IP whitelisting for all routes
+      - name: ip-restriction
+        config:
+          allow:
+            {{- range .Values.kongConfig.ipWhitelist.allow }}
+            - {{ . | quote }}
+            {{- end }}
+        route: login-route
+      - name: ip-restriction
+        config:
+          allow:
+            {{- range .Values.kongConfig.ipWhitelist.allow }}
+            - {{ . | quote }}
+            {{- end }}
+        route: health-route
+      - name: ip-restriction
+        config:
+          allow:
+            {{- range .Values.kongConfig.ipWhitelist.allow }}
+            - {{ . | quote }}
+            {{- end }}
+        route: verify-route
+      - name: ip-restriction
+        config:
+          allow:
+            {{- range .Values.kongConfig.ipWhitelist.allow }}
+            - {{ . | quote }}
+            {{- end }}
+        route: users-route
+
+      # JWT authentication ONLY for protected routes
+      - name: jwt
+        config:
+          secret_is_base64: {{ .Values.kongConfig.jwt.secret_is_base64 }}
+          uri_param_names:
+            {{- range .Values.kongConfig.jwt.uri_param_names }}
+            - {{ . | quote }}
+            {{- end }}
+          claims_to_verify:
+            {{- range .Values.kongConfig.jwt.claims_to_verify }}
+            - {{ . | quote }}
+            {{- end }}
+        route: users-route
+
+      # Custom Lua plugin for all routes
+      - name: custom-lua-plugin
+        config:
+          inject_header: true
+          header_name: "X-Request-ID"
+          log_requests: true
+        route: login-route
+      - name: custom-lua-plugin
+        config:
+          inject_header: true
+          header_name: "X-Request-ID"
+          log_requests: true
+        route: health-route
+      - name: custom-lua-plugin
+        config:
+          inject_header: true
+          header_name: "X-Request-ID"
+          log_requests: true
+        route: verify-route
+      - name: custom-lua-plugin
+        config:
+          inject_header: true
+          header_name: "X-Request-ID"
+          log_requests: true
+        route: users-route
+
+    consumers:
+      - username: api-consumer
+        custom_id: api-consumer-001
+        jwt_secrets:
+          - key: "user-service-issuer"
+            algorithm: "HS256"
+            secret: {{ .Values.kongConfig.jwt.consumerSecret | quote }}

@@ -1,0 +1,131 @@
+---
+# CrowdSec Agent for DDoS Protection
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: crowdsec-config
+  namespace: api-platform
+data:
+  config.yaml: |
+    api:
+      server:
+        listen_uri: 127.0.0.1:8080
+        profiles_path: /etc/crowdsec/profiles.yaml
+    common:
+      daemonize: false
+      pid_dir: /var/run/
+      log_media: stdout
+      log_level: info
+      log_dir: /var/log/
+    crowdsec_service:
+      acquisition_path: /etc/crowdsec/acquis.yaml
+      parser_dir: /etc/crowdsec/parsers/
+      acquisition_dir: /etc/crowdsec/acquis.d/
+    cscli:
+      output: human
+      hub_branch: master
+  acquis.yaml: |
+    datasource: kubernetes
+    labels:
+      type: nginx
+    source: file
+    filenames:
+      - /var/log/nginx/access.log
+---
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: crowdsec
+  namespace: api-platform
+  labels:
+    app: crowdsec
+spec:
+  selector:
+    matchLabels:
+      app: crowdsec
+  template:
+    metadata:
+      labels:
+        app: crowdsec
+    spec:
+      containers:
+      - name: crowdsec
+        image: crowdsecurity/crowdsec:latest
+        imagePullPolicy: IfNotPresent
+        ports:
+        - containerPort: 8080
+          name: api
+        volumeMounts:
+        - name: config
+          mountPath: /etc/crowdsec
+        - name: logs
+          mountPath: /var/log/nginx
+        env:
+        - name: CROWDSEC_FEATURE_DISABLE_ONLINE_API
+          value: "true"
+        resources:
+          requests:
+            memory: "128Mi"
+            cpu: "100m"
+          limits:
+            memory: "512Mi"
+            cpu: "500m"
+      volumes:
+      - name: config
+        configMap:
+          name: crowdsec-config
+      - name: logs
+        hostPath:
+          path: /var/log/nginx
+          type: DirectoryOrCreate
+---
+# CrowdSec Bouncer (Kong Plugin Integration)
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: crowdsec-bouncer
+  namespace: api-platform
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: crowdsec-bouncer
+  template:
+    metadata:
+      labels:
+        app: crowdsec-bouncer
+    spec:
+      containers:
+      - name: bouncer
+        image: crowdsecurity/cs-kong-bouncer:latest
+        imagePullPolicy: IfNotPresent
+        ports:
+        - containerPort: 8080
+        env:
+        - name: CROWDSEC_API_URL
+          value: "http://crowdsec:8080"
+        - name: BOUNCER_KEY
+          valueFrom:
+            secretKeyRef:
+              name: crowdsec-secret
+              key: bouncer-key
+        resources:
+          requests:
+            memory: "64Mi"
+            cpu: "50m"
+          limits:
+            memory: "128Mi"
+            cpu: "100m"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: crowdsec
+  namespace: api-platform
+spec:
+  selector:
+    app: crowdsec
+  ports:
+  - port: 8080
+    targetPort: 8080
+    protocol: TCP
